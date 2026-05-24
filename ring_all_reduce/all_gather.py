@@ -1,3 +1,5 @@
+# %%manim -v WARNING -qm AllGatherAnimation
+
 from manim import *
 import numpy as np
 
