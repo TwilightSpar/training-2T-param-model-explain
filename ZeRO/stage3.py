@@ -99,32 +99,52 @@ class ZeROStage3(Scene):
         self.add(header)
 
         full_1 = [[1]*6 for _ in range(6)]
+        full_2 = [[2]*6 for _ in range(6)]
         empty = [[0]*6 for _ in range(6)]
         diag_1 = [[1 if i==j else 0 for j in range(6)] for i in range(6)]
         diag_2 = [[2 if i==j else 0 for j in range(6)] for i in range(6)]
 
-        # --- STEP 0 ---
-        self.play(*update_center("Initial State", "Everything is strictly sharded!\nMax memory savings."))
+        # --- STEP 0: Init ---
+        self.play(*update_center("Step 0: Initial State", "Everything is strictly sharded!\nMax memory savings."))
         gpus_current = create_gpus(diag_1, empty, diag_1)
         self.play(FadeIn(gpus_current))
         self.wait(2)
 
-        # --- STEP 1 ---
-        self.play(*update_center("Forward All-Gather", "Assemble weights for\nlayer activations."))
+        # --- STEP 1: All-Gather Weight ---
+        self.play(*update_center("Step 1: All-Gather Weight", "Assemble weights for\nlayer activations."))
         gpus_current = animate_transition(gpus_current, full_1, empty, diag_1)
         self.wait(2)
 
-        # --- STEP 2 ---
-        self.play(*update_center("Backward Pass", "Calculate full gradients\ndynamically."))
+        # --- STEP 2: Forward Pass ---
+        self.play(*update_center("Step 2: Forward Pass", "Compute layer activations."))
+        self.wait(2)
+
+        # --- STEP 3: Backward Pass ---
+        self.play(*update_center("Step 3: Backward Pass", "Calculate full gradients\ndynamically."))
         gpus_current = animate_transition(gpus_current, full_1, full_1, diag_1)
         self.wait(2)
 
-        # --- STEP 3 ---
-        self.play(*update_center("Reduce-Scatter", "Average and shard gradients.\nDiscard unassigned weights."))
-        gpus_current = animate_transition(gpus_current, diag_1, diag_2, diag_1, pop_g=True)
+        # --- STEP 4: Average Gradient ---
+        self.play(*update_center("Step 4: Average Gradient", "Reduce-Scatter process."))
+        gpus_current = animate_transition(gpus_current, full_1, full_2, diag_1, pop_g=True)
         self.wait(2)
 
-        # --- STEP 4 ---
-        self.play(*update_center("Weight Update", "Update assigned chunk.\nNo final broadcast!"))
-        gpus_current = animate_transition(gpus_current, diag_2, empty, diag_2, pop_w=True, pop_o=True)
+        # --- STEP 5: Discard Unused Grad ---
+        self.play(*update_center("Step 5: Discard Unused Grad", "Discard unassigned weights\nand gradients."))
+        gpus_current = animate_transition(gpus_current, diag_1, diag_2, diag_1)
+        self.wait(2)
+
+        # --- STEP 6: Update Optimizer Chunk ---
+        self.play(*update_center("Step 6: Update Optimizer", "Optimizer states update."))
+        gpus_current = animate_transition(gpus_current, diag_1, diag_2, diag_2, pop_o=True)
+        self.wait(2)
+
+        # --- STEP 7: Update Weight ---
+        self.play(*update_center("Step 7: Update Weight", "Update assigned chunk."))
+        gpus_current = animate_transition(gpus_current, diag_2, empty, diag_2, pop_w=True)
+        self.wait(2)
+
+        # --- STEP 8: All-Gather Weight ---
+        self.play(*update_center("Step 8: All-Gather Weight", "Broadcast updated chunks\nfor the next step."))
+        gpus_current = animate_transition(gpus_current, full_2, empty, diag_1, pop_w=True)
         self.wait(3)

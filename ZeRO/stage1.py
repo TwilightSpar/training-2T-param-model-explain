@@ -18,7 +18,6 @@ class ZeROStage1(Scene):
                 blocks_group = VGroup()
                 letters_group = VGroup()
                 
-                # Rows for Weights, Gradients, Optimizer (O gets taller height: 0.45 vs 0.25)
                 for name, status, color, u_color, rect_h in [
                     ("W", state_w[i], W_COLOR, W_UPDATED, 0.25), 
                     ("G", state_g[i], G_COLOR, G_UPDATED, 0.25), 
@@ -68,7 +67,6 @@ class ZeROStage1(Scene):
                                 rect = gpus_new[i][1][1][layer][j][0]
                                 pop_rects.append(rect)
             
-            # Pulse effect: scale up then immediately back to normal
             if pop_rects:
                 self.play(*[r.animate.scale(1.4) for r in pop_rects], run_time=0.2)
                 self.play(*[r.animate.scale(1/1.4) for r in pop_rects], run_time=0.2)
@@ -102,7 +100,6 @@ class ZeROStage1(Scene):
                 title_text, desc_text, title_bg = next_title, next_desc, next_bg
                 return anims
 
-        # Header is now smaller and uses a line break to avoid overlap
         header = MarkupText("ZeRO Stage 1:\nOptimizer State Partitioning", font_size=25, weight=BOLD, font="Helvetica Neue").to_corner(UL)
         self.add(header)
 
@@ -112,29 +109,39 @@ class ZeROStage1(Scene):
         diag_1 = [[1 if i==j else 0 for j in range(6)] for i in range(6)]
         diag_2 = [[2 if i==j else 0 for j in range(6)] for i in range(6)]
 
-        # --- STEP 0 ---
-        self.play(*update_center("Initial State", "Optimizer sharded.\nWeights replicated."))
+        # --- STEP 0: Init ---
+        self.play(*update_center("Step 0: Initial State", "Optimizer sharded.\nWeights replicated."))
         gpus_current = create_gpus(full_1, empty, diag_1)
         self.play(FadeIn(gpus_current))
         self.wait(2)
 
-        # --- STEP 1 ---
-        self.play(*update_center("Fwd and Bwd Pass", "Calculate full gradients\nfor micro-batch."))
+        # --- STEP 1: Forward ---
+        self.play(*update_center("Step 1: Forward Pass", "Compute activations with\nfull model weights."))
+        # State unchanged
+        self.wait(2)
+
+        # --- STEP 2: Backward ---
+        self.play(*update_center("Step 2: Backward Pass", "Calculate full gradients\nfor local micro-batch."))
         gpus_current = animate_transition(gpus_current, full_1, full_1, diag_1)
         self.wait(2)
 
-        # --- STEP 2 ---
-        self.play(*update_center("All-Reduce Gradients", "Average gradients.\nAll GPUs hold full copy."))
+        # --- STEP 3: Average Gradient ---
+        self.play(*update_center("Step 3: Average Gradient", "Reduce gradients.\nAll GPUs hold full copy."))
         gpus_current = animate_transition(gpus_current, full_1, full_2, diag_1, pop_g=True)
         self.wait(2)
 
-        # --- STEP 3 ---
-        self.play(*update_center("Weight Update", "Use Optimizer chunk to update.\nDiscard unused Gradients."))
-        w_step3 = [[2 if i==j else 1 for j in range(6)] for i in range(6)]
-        gpus_current = animate_transition(gpus_current, w_step3, empty, diag_2, pop_w=True, pop_o=True)
+        # --- STEP 4: Update Optimizer Chunk ---
+        self.play(*update_center("Step 4: Update Optimizer", "Optimizer states update\nlocally for assigned chunks."))
+        gpus_current = animate_transition(gpus_current, full_1, full_2, diag_2, pop_o=True)
         self.wait(2)
 
-        # --- STEP 4 ---
-        self.play(*update_center("All-Gather Weights", "Broadcast updated weights\nto full model."))
+        # --- STEP 5: Update Weight ---
+        self.play(*update_center("Step 5: Update Weight", "Use Optimizer chunk to update.\nDiscard unused Gradients."))
+        w_step5 = [[2 if i==j else 1 for j in range(6)] for i in range(6)]
+        gpus_current = animate_transition(gpus_current, w_step5, empty, diag_2, pop_w=True)
+        self.wait(2)
+
+        # --- STEP 6: All-Gather Weight ---
+        self.play(*update_center("Step 6: All-Gather Weight", "Broadcast updated weights\nto reconstruct full model."))
         gpus_current = animate_transition(gpus_current, full_2, empty, diag_1, pop_w=True)
         self.wait(3)
