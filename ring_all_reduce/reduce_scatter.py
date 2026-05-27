@@ -17,7 +17,7 @@ class RingAllReduceAnimation(Scene):
         empty_color = "#2A3B3B" # Dark green-gray for empty slots
         
         # 1. Title
-        title = Text("Ring All-Reduce", font_size=32, weight=BOLD, font="Helvetica Neue")
+        title = Text("Reduce-scatter", font_size=32, weight=BOLD, font="Helvetica Neue")
         title.to_corner(UL, buff=0.5)
         self.add(title)
 
