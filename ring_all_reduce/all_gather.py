@@ -17,7 +17,7 @@ class AllGatherAnimation(Scene):
         empty_color = "#2A3B3B" # Dark green-gray for ungathered slots
         
         # 1. Title
-        title = Text("Ring All-Reduce", font_size=32, weight=BOLD)
+        title = Text("Ring All-Reduce", font_size=32, weight=BOLD, font="Helvetica Neue")
         title.to_corner(UL, buff=0.5)
         self.add(title)
 
@@ -27,11 +27,11 @@ class AllGatherAnimation(Scene):
         center_offset = DOWN * 0.2
 
         # 3. Dynamic Center Text
-        step_text = Text("All-Gather: each GPU has a different chunk", font_size=16, color=WHITE, weight=BOLD)
+        step_text = Text("All-Gather: each GPU has a different chunk", font_size=16, color=WHITE, weight=BOLD, font="Helvetica Neue")
         step_bg = SurroundingRectangle(step_text, color=WHITE, stroke_width=1, fill_color="#1E3232", fill_opacity=1, corner_radius=0.1)
         center_group = VGroup(step_bg, step_text).move_to(center_offset)
         
-        sub_text = Text("reduced chunks now circulate so every GPU gets all", font_size=12, color=LIGHT_GRAY)
+        sub_text = Text("reduced chunks now circulate so every GPU gets all", font_size=12, color=LIGHT_GRAY, font="Helvetica Neue")
         sub_text.next_to(center_group, DOWN, buff=0.2)
         
         self.add(center_group, sub_text)
@@ -67,13 +67,13 @@ class AllGatherAnimation(Scene):
             for j in range(6):
                 rect = rects[j]
                 
-                c_label = Text(f"C{j}", font_size=10, color=WHITE)
+                c_label = Text(f"C{j}", font_size=10, color=WHITE, font="Helvetica Neue")
                 c_label.next_to(rect, LEFT, buff=0.1)
                 labels.add(c_label)
                 
                 # Setup fractions: 6/6 for the full one, 1/6 for the others
                 frac_str = "6/6" if j == initial_full_chunk else "1/6"
-                frac = Text(frac_str, font_size=10, color=WHITE)
+                frac = Text(frac_str, font_size=10, color=WHITE, font="Helvetica Neue")
                 frac.move_to(rect.get_right() + LEFT * 0.2)
                 fracs.add(frac)
                 
@@ -81,7 +81,7 @@ class AllGatherAnimation(Scene):
             
             box = SurroundingRectangle(VGroup(rects, labels), buff=0.1, color=WHITE, stroke_width=1.2, corner_radius=0.05)
             
-            gpu_label = Text(f"GPU {i}", font_size=14, weight=BOLD)
+            gpu_label = Text(f"GPU {i}", font_size=14, weight=BOLD, font="Helvetica Neue")
             gpu_label.next_to(box, DOWN, buff=0.1)
             
             gpu_node = VGroup(box, rects, labels, fracs, gpu_label)
@@ -127,7 +127,7 @@ class AllGatherAnimation(Scene):
 
         # 6. Animation Loop: The 5 steps of All-Gather
         for s in range(1, 6):
-            new_step_text = Text(f"All-Gather \u00b7 Step {s} / 5", font_size=16, color=WHITE, weight=BOLD)
+            new_step_text = Text(f"All-Gather \u00b7 Step {s} / 5", font_size=16, color=WHITE, weight=BOLD, font="Helvetica Neue")
             new_step_text.move_to(step_text.get_center())
             self.play(Transform(step_text, new_step_text), run_time=0.5)
             
@@ -168,7 +168,7 @@ class AllGatherAnimation(Scene):
                 rect.set_fill(chunk_colors[chunk_id], 1.0)
                 
                 # Update text to 6/6
-                new_frac = Text("6/6", font_size=10, color=WHITE)
+                new_frac = Text("6/6", font_size=10, color=WHITE, font="Helvetica Neue")
                 new_frac.move_to(rect.get_right() + LEFT * 0.2)
                 
                 update_anims.append(Transform(frac, new_frac))
