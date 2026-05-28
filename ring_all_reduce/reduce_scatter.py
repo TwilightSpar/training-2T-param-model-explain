@@ -1,20 +1,22 @@
-# %%manim -v WARNING -qm RingAllReduceAnimation
+# %%manim -v WARNING -qm ReduceScatterAnimation
 
 from manim import *
 import numpy as np
 
-class RingAllReduceAnimation(Scene):
+class ReduceScatterAnimation(Scene):
     def construct(self):
-        # Match the pastel colors from the reference image
+        # Match the pastel colors from the reference image, wrapped in ManimColor to fix the interpolate error
         chunk_colors = [
-            "#5D9CEC", # Blue (C0)
-            "#A8E6CF", # Light Green (C1)
-            "#D98880", # Pink/Red (C2)
-            "#F9E79F", # Yellow (C3)
-            "#76D7C4", # Teal (C4)
-            "#C39BD3"  # Purple (C5)
+            ManimColor("#5D9CEC"), # Blue (C0)
+            ManimColor("#A8E6CF"), # Light Green (C1)
+            ManimColor("#D98880"), # Pink/Red (C2)
+            ManimColor("#F9E79F"), # Yellow (C3)
+            ManimColor("#76D7C4"), # Teal (C4)
+            ManimColor("#C39BD3")  # Purple (C5)
         ]
-        empty_color = "#2A3B3B" # Dark green-gray for empty slots
+        
+        # Base color for the starting state (opaque white)
+        base_color = ManimColor("#FFFFFF")
         
         # 1. Title
         title = Text("Reduce-scatter", font_size=32, weight=BOLD, font="Helvetica Neue")
@@ -31,7 +33,7 @@ class RingAllReduceAnimation(Scene):
         step_bg = SurroundingRectangle(step_text, color=WHITE, stroke_width=1, fill_color="#1E3232", fill_opacity=1, corner_radius=0.1)
         center_group = VGroup(step_bg, step_text).move_to(center_offset)
         
-        sub_text = Text("6 different chunks, no gpu idle", font_size=12, color=LIGHT_GRAY, font="Helvetica Neue")
+        sub_text = Text("All 6 chunks calculated per GPU (1/6)", font_size=12, color=LIGHT_GRAY, font="Helvetica Neue")
         sub_text.next_to(center_group, DOWN, buff=0.2)
         
         self.add(center_group, sub_text)
@@ -51,10 +53,12 @@ class RingAllReduceAnimation(Scene):
             
             for j in range(6):
                 rect = Rectangle(height=0.2, width=0.9, stroke_width=1, stroke_color=WHITE)
-                if j == i:
-                    rect.set_fill(chunk_colors[j], 1.0)
-                else:
-                    rect.set_fill(empty_color, 1.0)
+                
+                # Interpolate from opaque white to target color. 
+                # Alpha is 1/6 so it starts mostly white (very light). Opacity is kept 100% solid.
+                start_color = interpolate_color(base_color, chunk_colors[j], 1/6.0)
+                rect.set_fill(start_color, opacity=1.0)
+                
                 rects.add(rect)
                 
             rects.arrange(DOWN, buff=0)
@@ -62,13 +66,14 @@ class RingAllReduceAnimation(Scene):
             for j in range(6):
                 rect = rects[j]
                 
+                # Outer label (C0, C1, etc.) stays white as it's on the black background
                 c_label = Text(f"C{j}", font_size=10, color=WHITE, font="Helvetica Neue")
                 c_label.next_to(rect, LEFT, buff=0.1)
                 labels.add(c_label)
                 
-                frac = Text("", font_size=10, color=WHITE, font="Helvetica Neue")
-                if j == i:
-                    frac.become(Text("1/6", font_size=10, color=WHITE, font="Helvetica Neue").move_to(rect.get_right() + LEFT * 0.2))
+                # Inner fraction label changed to BLACK for contrast against the white/pastel backgrounds
+                frac = Text("1/6", font_size=10, color=BLACK, font="Helvetica Neue")
+                frac.move_to(rect.get_right() + LEFT * 0.2)
                 fracs.add(frac)
                 
                 blocks_for_this_gpu.append({'rect': rect, 'frac': frac})
@@ -133,13 +138,14 @@ class RingAllReduceAnimation(Scene):
                 chunk_id = (i - s + 1) % 6 
                 
                 source_rect = gpu_blocks[i][chunk_id]['rect']
-                moving_rect = source_rect.copy()
-                moving_rect.set_fill(chunk_colors[chunk_id], 1.0)
                 
+                # Copying retains the current chunk's color state
+                moving_rect = source_rect.copy()
                 moving_shards.add(moving_rect)
                 
-                new_frac_str = f"{s+1}/6"
-                dest_updates.append((target_gpu, chunk_id, new_frac_str))
+                # The updated count for the target chunk
+                new_count = s + 1
+                dest_updates.append((target_gpu, chunk_id, new_count))
                 
             self.add(moving_shards)
             
@@ -152,13 +158,21 @@ class RingAllReduceAnimation(Scene):
             self.play(*move_anims, run_time=1.5)
             
             update_anims = []
-            for target_gpu, chunk_id, new_frac_str in dest_updates:
+            for target_gpu, chunk_id, new_count in dest_updates:
                 rect = gpu_blocks[target_gpu][chunk_id]['rect']
                 frac = gpu_blocks[target_gpu][chunk_id]['frac']
                 
-                rect.set_fill(chunk_colors[chunk_id], 1.0)
+                # Calculate the new interpolated color progressing towards the target color
+                new_color = interpolate_color(base_color, chunk_colors[chunk_id], new_count / 6.0)
                 
-                new_frac = Text(new_frac_str, font_size=10, color=WHITE, font="Helvetica Neue")
+                # If it's the final reduced chunk (6/6), add a distinct black border
+                if new_count == 6:
+                    update_anims.append(rect.animate.set_fill(new_color, opacity=1.0).set_stroke(color=BLACK, width=2.5))
+                else:
+                    update_anims.append(rect.animate.set_fill(new_color, opacity=1.0))
+                
+                # Keep the inner text black for consistent visibility on light backgrounds
+                new_frac = Text(f"{new_count}/6", font_size=10, color=BLACK, font="Helvetica Neue")
                 new_frac.move_to(rect.get_right() + LEFT * 0.2)
                 
                 update_anims.append(Transform(frac, new_frac))
