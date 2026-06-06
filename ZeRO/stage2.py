@@ -1,16 +1,31 @@
-# %%manim -v WARNING -qm ZeROStage2
 from manim import *
 import numpy as np
 
 class ZeROStage2(Scene):
     def construct(self):
-        W_COLOR = "#5D9CEC"   
-        W_UPDATED = "#2E86C1" 
-        G_COLOR = "#D98880"   
-        G_UPDATED = "#E74C3C" 
-        O_COLOR = "#A8E6CF"   
-        O_UPDATED = "#27AE60" 
-        EMPTY = "#555555"     
+        def get_color(comp, status, c, gpu_idx):
+            W_BASE = "#5D9CEC"
+            W_UPD = "#2E86C1"
+            G_BASE = "#D98880"
+            G_UPD = "#E74C3C"
+            O_BASE = "#A8E6CF"
+            O_UPD = "#27AE60"
+            EMPTY = "#555555"
+            
+            palette = [
+                [W_BASE, W_UPD],
+                [G_BASE, G_UPD],
+                [O_BASE, O_UPD]
+            ]
+            base_col, upd_col = palette[comp]
+            
+            if status == 0: return EMPTY
+            elif status == 1: return base_col if c == gpu_idx else EMPTY
+            elif status == 2: return base_col
+            elif status == 3: return upd_col if c == gpu_idx else EMPTY
+            elif status == 4: return upd_col
+            elif status == 5: return upd_col if c == gpu_idx else base_col
+            return EMPTY
 
         def create_gpus(state_w, state_g, state_o):
             gpus = VGroup()
@@ -18,55 +33,72 @@ class ZeROStage2(Scene):
                 blocks_group = VGroup()
                 letters_group = VGroup()
                 
-                for name, status, color, u_color, rect_h in [
-                    ("W", state_w[i], W_COLOR, W_UPDATED, 0.25), 
-                    ("G", state_g[i], G_COLOR, G_UPDATED, 0.25), 
-                    ("O", state_o[i], O_COLOR, O_UPDATED, 0.45)
-                ]:
-                    letter = MarkupText(name, font_size=12, weight=BOLD, font="Helvetica Neue")
-                    blocks = VGroup()
-                    for j in range(6):
-                        sq = Rectangle(height=rect_h, width=0.35, stroke_width=1, stroke_color=WHITE)
-                        if status[j] == 1: sq.set_fill(color, 1.0)
-                        elif status[j] == 2: sq.set_fill(u_color, 1.0) 
-                        else: sq.set_fill(EMPTY, 1.0) 
+                for comp_idx, (name, status_list, rect_h) in enumerate([
+                    ("W", state_w[i], 0.25), 
+                    ("G", state_g[i], 0.25), 
+                    ("O", state_o[i], 0.45)
+                ]):
+                    letter = MarkupText(name, font_size=12, weight=BOLD, font="Arial")
+                    layers = VGroup()
+                    
+                    for L in range(4):
+                        layer_status = status_list[L]
+                        chunks = VGroup()
+                        for c in range(6):
+                            sq = Rectangle(height=rect_h, width=0.12, stroke_width=0.5, stroke_color=WHITE)
+                            color = get_color(comp_idx, layer_status, c, i)
+                            sq.set_fill(color, 1.0)
+                            chunks.add(sq)
+                        chunks.arrange(RIGHT, buff=0)
                         
-                        num = MarkupText(str(j), font_size=10, color=WHITE, font="Helvetica Neue").move_to(sq.get_center())
-                        blocks.add(VGroup(sq, num))
-                    blocks.arrange(RIGHT, buff=0)
-                    blocks_group.add(blocks)
+                        layer_border = SurroundingRectangle(chunks, buff=0, stroke_width=1.2, stroke_color=WHITE)
+                        lbl = MarkupText(f"L{L+1}", font_size=10, color=WHITE).move_to(chunks.get_center())
+                        
+                        single_layer = VGroup(chunks, layer_border, lbl)
+                        layers.add(single_layer)
+                        
+                    layers.arrange(RIGHT, buff=0.12)
+                    blocks_group.add(layers)
                     letters_group.add(letter)
-                
+                    
                 blocks_group.arrange(DOWN, buff=0.1)
                 for letter, blocks in zip(letters_group, blocks_group):
                     letter.next_to(blocks, LEFT, buff=0.1)
-                
+                    
                 gpu_content = VGroup(letters_group, blocks_group)
                 box = SurroundingRectangle(gpu_content, buff=0.1, color=WHITE, stroke_width=1, corner_radius=0.05)
-                title = MarkupText(f"GPU {i}", font_size=14, weight=BOLD, font="Helvetica Neue").next_to(box, DOWN, buff=0.1)
+                title = MarkupText(f"GPU {i}", font_size=14, weight=BOLD, font="Arial").next_to(box, DOWN, buff=0.1)
                 
                 node = VGroup(box, gpu_content, title)
                 angle = np.pi/2 - i * (2 * np.pi / 6)
-                node.move_to(DOWN*0.2 + np.array([3.1 * np.cos(angle), 3.1 * np.sin(angle), 0]))
+                pos = DOWN*0.2 + np.array([3.1 * np.cos(angle), 3.1 * np.sin(angle), 0])
+                
+                if i in [2, 3, 4]:
+                    pos += UP * 0.4
+                    
+                node.move_to(pos)
                 gpus.add(node)
+                
             return gpus
 
-        def animate_transition(gpus_curr, state_w, state_g, state_o, pop_w=False, pop_g=False, pop_o=False):
+        def animate_transition(gpus_curr, state_w, state_g, state_o, pop_w=False, pop_g=False, pop_o=False, pop_layer=None):
             gpus_new = create_gpus(state_w, state_g, state_o)
-            self.play(FadeOut(gpus_curr, run_time=0.5), FadeIn(gpus_new, run_time=1.0))
+            self.play(FadeOut(gpus_curr, run_time=0.3), FadeIn(gpus_new, run_time=0.7))
             
             pop_rects = []
             for i in range(6):
-                for layer, states, do_pop in [(0, state_w[i], pop_w), (1, state_g[i], pop_g), (2, state_o[i], pop_o)]:
+                for comp_idx, (states, do_pop) in enumerate([(state_w[i], pop_w), (state_g[i], pop_g), (state_o[i], pop_o)]):
                     if do_pop:
-                        for j in range(6):
-                            if states[j] == 2:
-                                rect = gpus_new[i][1][1][layer][j][0]
+                        for j in range(4):
+                            if pop_layer is not None and j != pop_layer:
+                                continue
+                            if states[j] in [3, 4, 5]:
+                                rect = gpus_new[i][1][1][comp_idx][j]
                                 pop_rects.append(rect)
-            
+                                
             if pop_rects:
-                self.play(*[r.animate.scale(1.4) for r in pop_rects], run_time=0.2)
-                self.play(*[r.animate.scale(1/1.4) for r in pop_rects], run_time=0.2)
+                self.play(*[r.animate.scale(1.3) for r in pop_rects], run_time=0.2)
+                self.play(*[r.animate.scale(1/1.3) for r in pop_rects], run_time=0.2)
                 
             return gpus_new
 
@@ -77,8 +109,10 @@ class ZeROStage2(Scene):
         
         def update_center(new_title, new_desc):
             nonlocal title_text, title_bg, desc_text, is_first_time
-            next_title = MarkupText(new_title, font_size=16, color=WHITE, weight=BOLD, font="Helvetica Neue")
-            next_desc = MarkupText(new_desc, font_size=12, color=LIGHT_GRAY, font="Helvetica Neue")
+            
+            next_title = MarkupText(new_title, font_size=16, color=WHITE, weight=BOLD, font="Arial")
+            next_desc = MarkupText(new_desc, font_size=12, color=LIGHT_GRAY, font="Arial")
+            
             next_content = VGroup(next_title, next_desc).arrange(DOWN, buff=0.15).move_to(ORIGIN)
             next_bg = SurroundingRectangle(next_content, color=WHITE, stroke_width=1, fill_color="#1E3232", fill_opacity=1, corner_radius=0.1)
             
@@ -89,58 +123,54 @@ class ZeROStage2(Scene):
             else:
                 anims = [
                     ReplacementTransform(title_bg, next_bg),
-                    FadeOut(title_text, run_time=0.5), FadeIn(next_title, run_time=1.0),
-                    FadeOut(desc_text, run_time=0.5), FadeIn(next_desc, run_time=1.0)
+                    FadeOut(title_text, run_time=0.3), FadeIn(next_title, run_time=0.7),
+                    FadeOut(desc_text, run_time=0.3), FadeIn(next_desc, run_time=0.7)
                 ]
                 title_text, desc_text, title_bg = next_title, next_desc, next_bg
                 return anims
 
-        header = MarkupText("ZeRO Stage 2:\nGradients and Optimizer Partitioning", font_size=25, weight=BOLD, font="Helvetica Neue").to_corner(UL)
+        header = MarkupText("ZeRO Stage 2:\nGradients, Optimizer Partitioning", font_size=20, weight=BOLD, font="Arial").to_corner(UL)
         self.add(header)
 
-        full_1 = [[1]*6 for _ in range(6)]
-        full_2 = [[2]*6 for _ in range(6)]
-        empty = [[0]*6 for _ in range(6)]
-        diag_1 = [[1 if i==j else 0 for j in range(6)] for i in range(6)]
-        diag_2 = [[2 if i==j else 0 for j in range(6)] for i in range(6)]
+        def make_state(val): return [[val]*4 for _ in range(6)]
+        
+        state_w = make_state(2)
+        state_g = make_state(0)
+        state_o = make_state(1)
 
-        # --- STEP 0: Init ---
-        self.play(*update_center("Step 0: Initial State", "Optimizer and Grads sharded.\nWeights replicated."))
-        gpus_current = create_gpus(full_1, empty, diag_1)
+        # --- 1. Forward ---
+        self.play(*update_center("Step 1: Forward Pass", "Compute activations with\nfull model weights."))
+        gpus_current = create_gpus(state_w, state_g, state_o)
         self.play(FadeIn(gpus_current))
         self.wait(2)
 
-        # --- STEP 1: Forward ---
-        self.play(*update_center("Step 1: Forward Pass", "Compute activations with\nfull model weights."))
+        # --- 2. Backward (Layer by Layer) ---
+        for L in [3, 2, 1, 0]:
+            self.play(*update_center(f"Step 2: Backward Layer {L+1}", f"Calculate gradients for layer {L+1}."))
+            for i in range(6): state_g[i][L] = 2
+            gpus_current = animate_transition(gpus_current, state_w, state_g, state_o)
+            self.wait(1)
+
+            self.play(*update_center(f"Step 2: Reduce-Scatter Layer {L+1}", "Reduce gradients and discard 5/6ths."))
+            for i in range(6): state_g[i][L] = 3
+            gpus_current = animate_transition(gpus_current, state_w, state_g, state_o, pop_g=True, pop_layer=L)
+            self.wait(1)
+
+        # --- 3. Update Optimizer ---
+        self.play(*update_center("Step 3: Update Optimizer", ""))
+        state_o = make_state(3)
+        gpus_current = animate_transition(gpus_current, state_w, state_g, state_o, pop_o=True)
         self.wait(2)
 
-        # --- STEP 2: Backward ---
-        self.play(*update_center("Step 2: Backward Pass", "Calculate full gradients\ntemporarily."))
-        gpus_current = animate_transition(gpus_current, full_1, full_1, diag_1)
+        # --- 4. Update Weight ---
+        self.play(*update_center("Step 4: Update Weight", ""))
+        state_w = make_state(5)
+        state_g = make_state(0)
+        gpus_current = animate_transition(gpus_current, state_w, state_g, state_o, pop_w=True)
         self.wait(2)
 
-        # --- STEP 3: Average Gradient ---
-        self.play(*update_center("Step 3: Average Gradient", "Reduce-Scatter process."))
-        gpus_current = animate_transition(gpus_current, full_1, full_2, diag_1, pop_g=True)
-        self.wait(2)
-
-        # --- STEP 4: Discard Unused Grad ---
-        self.play(*update_center("Step 4: Discard Unused Grad", "Discard unassigned chunks."))
-        gpus_current = animate_transition(gpus_current, full_1, diag_2, diag_1)
-        self.wait(2)
-
-        # --- STEP 5: Update Optimizer Chunk ---
-        self.play(*update_center("Step 5: Update Optimizer", "Optimizer states update."))
-        gpus_current = animate_transition(gpus_current, full_1, diag_2, diag_2, pop_o=True)
-        self.wait(2)
-
-        # --- STEP 6: Update Weight ---
-        self.play(*update_center("Step 6: Update Weight", "Update assigned Weight.\nDiscard assigned Gradient."))
-        w_step6 = [[2 if i==j else 1 for j in range(6)] for i in range(6)]
-        gpus_current = animate_transition(gpus_current, w_step6, empty, diag_2, pop_w=True)
-        self.wait(2)
-
-        # --- STEP 7: All-Gather Weight ---
-        self.play(*update_center("Step 7: All-Gather Weight", "Broadcast updated weights."))
-        gpus_current = animate_transition(gpus_current, full_2, empty, diag_1, pop_w=True)
+        # --- 5. All-Gather Weight ---
+        self.play(*update_center("Step 5: All-Gather Weight", "Reconstruct full model."))
+        state_w = make_state(4)
+        gpus_current = animate_transition(gpus_current, state_w, state_g, state_o, pop_w=True)
         self.wait(3)
